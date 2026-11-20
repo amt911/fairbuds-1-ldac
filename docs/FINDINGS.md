@@ -601,3 +601,15 @@ RAM, o más frecuencia.
 - Resultado en el S25 (caja negra): dos H2 vacías aplicadas (`applied 2`), decoder a 44 100 y luego a
   48 000 Hz, último stream 2724 frames / 0 malos / 0 underflows. El usuario: "ahora sí funciona".
 - Sabotajes: 19 del decoder (incluidas variantes de `hooks.c` comprobadas con emu_hooks) y 9 de ganchos.
+
+## ¿LDAC a 96 kHz? (2026-11-20, emulador, `ldac/test/emu_rates.py`)
+
+- El decoder de v7j decodifica LDAC a 96 kHz correctamente (SNR L/R 108,6/103,1 dB, 0 frames malos,
+  frames de 256 muestras, misma memoria al iniciar: 39 KB).
+- Coste: 122 k instrucciones/frame de 256 muestras frente a 73 k/frame de 128 a 48 kHz → 1,66× por
+  segundo de audio → ~36 % de carga estimada a 208 MHz (48 kHz medido en el casco: ~21,5 %).
+- No se anuncia 96 kHz: el reproductor de la stock solo tiene códigos de frecuencia hasta 48 kHz
+  (habría que remuestrear a 48 kHz en el decoder o parchear toda la cadena de salida); LDAC usa los
+  mismos bitrates a 96 que a 48 kHz, así que a 96 kHz gasta bits en un ancho de banda que los
+  auriculares no reproducen; y los móviles eligen por defecto la frecuencia más alta anunciada, con lo
+  que anunciar 96 kHz empeoraría el uso normal (más CPU y batería, calidad útil igual o peor).
