@@ -564,3 +564,19 @@ RAM, o más frecuencia.
   probable caída de tensión al escribir flash. Nada aplicado; siguen con v7f. Cargar antes de flashear.
 - El vigilante de escucha (`guarded_play.py`) ahora corta el sonido ante cualquier error propio
   (antes, un timeout de estadísticas dejó la canción sonando sin vigilancia).
+
+## Ecualización con LDAC (2026-11-20)
+
+- Usuario (S25 Ultra, LDAC elegido a mano): "suenan muy bien, la ecualización ha cambiado un poco".
+- El EQ del casco no depende del códec: la única llamada a la función que lo aplica
+  (`FUN_0c113180(type, index)`, traza `[EQ] set type=%d,index=%d`, IIR por software) está en
+  0x0C113228 y pasa `(0, FUN_0c11f4a0())` = el preset actual de la app. En el arranque del stream
+  (0x0C113540) lo que cambia por códec es: `ctx+0x118` (SBC 0xAF, AAC 0x18), `ctx+0x11A`,
+  `dest_packet_mut` (SBC 35, AAC 3, otros 0) y `sysfreq (0xf, 4)` en la rama "sbc 48k freq";
+  nada de procesado de sonido.
+- La diferencia percibida viene de la fuente: ancho de banda de LDAC (660/990 kbps hasta ~20-24 kHz;
+  330 kbps recorta), el AAC del móvil (recorte ~16-18 kHz, 44,1 kHz) y el procesado del móvil por
+  códec. Sin micrófono no se puede medir aquí.
+- v7g flasheada con el procedimiento publicado (`build_all.sh` + `pc_ota3.py` con config de
+  direcciones a cero y dirección autodetectada): COMMIT OK, nombre y dirección del casco intactos,
+  `dest_mut` 120, lista ~112, 0 errores.

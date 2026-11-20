@@ -23,8 +23,11 @@ Status of the LDAC build:
 - Decoding was verified on the earbuds with built-in statistics: no decoding errors, no underflows and no
   restarts over full songs, with the CPU at ~22 % load.
 - Known differences from the official codecs:
-  - the sound **balance/EQ is a bit different** than with AAC (LDAC passes more treble, and the firmware
-    may process an unknown codec differently);
+  - the sound balance can differ from AAC. The earbuds apply the same EQ preset to every codec (checked
+    in the firmware). The difference comes from the source: LDAC at 660/990 kbps keeps treble that phone
+    AAC encoders cut around 16–18 kHz, LDAC at 330 kbps cuts more, and phones process each codec
+    differently (Samsung's UHQ upscaler, Dolby Atmos, 44.1 vs 48 kHz). For a fair comparison, fix the
+    phone's LDAC quality at 990 kbps;
   - **higher battery use while LDAC plays** (the CPU runs at ~208 MHz instead of ~104 MHz);
   - **~320 ms of buffering**, so video may lag on players that do not compensate.
 - Not supported: 88.2/96 kHz and mono LDAC. The earbuds only advertise 44.1/48 kHz stereo.
