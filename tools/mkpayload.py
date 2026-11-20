@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the LDAC RAM payload image (work/ldac/src/ldac_ram.h) from an ELF linked with
+"""Build the LDAC RAM payload image (ldac/src/ldac_ram.h) from an ELF linked with
 --emit-relocs at LDAC_RAM_VBASE.
 
 Checks (any failure aborts the build):

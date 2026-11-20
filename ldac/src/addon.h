@@ -39,7 +39,7 @@ typedef struct {
     uint16_t cpu_loop_run;     /* ticks for 100000 loop iterations, measured in store every 256 calls */
     uint16_t cpu_loop_runs;    /* number of such measurements */
 } ldac_stats_t;
-_Static_assert(sizeof(ldac_stats_t) == 120, "stats layout is shared with work/tools/ldac_stats.py");
+_Static_assert(sizeof(ldac_stats_t) == 120, "stats layout is shared with tools/ldac_stats.py");
 /* Statistics of the open LDAC stream, NULL when none (ldac_decoder.c). */
 const ldac_stats_t *ldac_stats_get(void);
 #endif

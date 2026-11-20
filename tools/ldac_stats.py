@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read the LDAC add-on statistics over the OTA SPP channel (RFCOMM 13), no audio involved.
 
-Request A5 'B' 'E' 'S' 'T'; reply A6, n, then n bytes of ldac_stats_t (work/ldac/src/addon.h),
+Request A5 'B' 'E' 'S' 'T'; reply A6, n, then n bytes of ldac_stats_t (ldac/src/addon.h),
 n = 0 when no LDAC stream is open (then 2 bytes follow: swap_mode, cfg_flag).
 Only use it while no OTA is running.  Usage:
   python3 ldac_stats.py [--addr AA:BB:..] [--interval 1.0] [--count 0] [--log FILE]

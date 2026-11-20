@@ -8,7 +8,7 @@ the stock libgcc helpers in the stock RAM copy. Framework calls (heap, list, sys
 lastframe) are stubbed in Python. Checks: decoded PCM matches the sine (SNR), return codes,
 no write outside allowed memory, underflow behaviour, list limiter.
 
-Usage: work/.venv/bin/python work/ldac/test/emu_decoder.py IMAGE.bin ADDON.elf
+Usage: .venv/bin/python ldac/test/emu_decoder.py IMAGE.bin ADDON.elf
 """
 import ctypes
 import math

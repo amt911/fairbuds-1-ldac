@@ -86,8 +86,8 @@ Firmware completo del SDK OpenPineBuds descartado: sustituye arranque, TWS, estu
   ID1 = decoder SBC (texto `0x2C0517A8`, datos `0x2C066388`), ID4 = AAC (`0x2C0525F8`, `0x2C066BE4`).
   El reproductor elige overlay con `FUN_0c10da88(1|4)`. **LDAC no usará overlay**: corre desde flash.
 - Helpers libgcc en RAM: `__aeabi_f2d` `0x20072315`, `__aeabi_d2iz` `0x200728F9` (bytes idénticos al
-  libgcc del SDK). `floor`/`__aeabi_d2lz`/`memcpy`/`memset` propios (`work/ldac/src/rt_helpers.c`,
-  test de host con 4 M de casos + sabotajes en `work/ldac/test/`).
+  libgcc del SDK). `floor`/`__aeabi_d2lz`/`memcpy`/`memset` propios (`ldac/src/rt_helpers.c`,
+  test de host con 4 M de casos + sabotajes en `ldac/test/`).
 
 ### Camino de un stream A2DP en la stock
 
@@ -134,15 +134,15 @@ Funciones stock usadas: `0x0C0C3D44` dispositivo A2DP actual; `0x0C0BCA00(dev)` 
 
 ### Ganchos implementados y verificados en emulación (2026-11-19)
 
-- Código: `work/ldac/src/hooks.c` (H1, H3 y la lógica de H2/H4), `hooks_asm.S` (trampolines H2/H4
+- Código: `ldac/src/hooks.c` (H1, H3 y la lógica de H2/H4), `hooks_asm.S` (trampolines H2/H4
   con registros exactos), `stock.h` + `stock_syms.ld` (direcciones con evidencia).
 - LR: H2/H4 sustituyen instrucciones que no eran `bl`; el único uso de LR como temporal en el
   callback (`0x0C0C00FA` escribe, `0x0C0C00FE`/`0x0C0C0708` leen) está dominado por esa escritura y
   en otro `case` del switch: los ganchos no rompen nada vivo.
-- `work/tools/build_ldac_image.py`: monta la imagen (stock + SBC-XQ + parches + blob + copia del
+- `tools/build_ldac_image.py`: monta la imagen (stock + SBC-XQ + parches + blob + copia del
   trailer), verifica bytes originales, autocomprueba el codificador de `bl` con los BL originales de
   H1/H3, permite solo las diferencias previstas, límite `0x1E0000`, check del device.
-- `work/ldac/test/emu_hooks.py` (Unicorn, venv `work/.venv`): ejecuta cada gancho desde su sitio real
+- `ldac/test/emu_hooks.py` (Unicorn, venv `.venv`): ejecuta cada gancho desde su sitio real
   en la imagen parcheada con el firmware cargado; comprueba punto de retorno, r0-r12/sp, flags,
   todas las escrituras de memoria (solo zonas permitidas) y argumentos a la stock (stubs):
   H1 dev0/dev1/dev2/stream NULL, H2 (LDAC 48k/44.1k, 96k no anunciado, aptX, SBC, otro), H4 (AAC,
@@ -151,7 +151,7 @@ Funciones stock usadas: `0x0C0C3D44` dispositivo A2DP actual; `0x0C0BCA00(dev)` 
 
 ### Decoder LDAC v1 (2026-11-19)
 
-`work/ldac/src/ldac_decoder.c`: camino MCU del glue LDAC del SDK adaptado a las estructuras stock
+`ldac/src/ldac_decoder.c`: camino MCU del glue LDAC del SDK adaptado a las estructuras stock
 (frame 0x14, lastframe 0x34 con 4 B extra al inicio, contexto `+0x16`/`+0x90`, cabecera RTP seq `+4`
 ts `+8`). Sin asserts: comprueba `a2dp_audio_heap_info` y `syspool_free_size` antes de reservar;
 decodifica en un buffer temporal de 1024 B (nunca escribe fuera del buffer del framework); aprende el
@@ -160,18 +160,18 @@ frame no decodificó. Lista liberada por el callback del framework (`0x0C126798`
 `packet_free` de la tabla copiada). Prioridad del SEP = 1 (SBC 2, AAC 3; dentro de cualquier rango
 que ya use el stock).
 
-Verificación (`work/ldac/test/emu_decoder.py`): seno 1 kHz codificado en el host con AOSP libldac
+Verificación (`ldac/test/emu_decoder.py`): seno 1 kHz codificado en el host con AOSP libldac
 (`libldacBT_enc.so`, HQ 990 kbps, MTU 679 -> paquetes de 660 B con 2 frames), decodificado por el
 código ARM real del blob en Unicorn (Cortex-M33 + FPU) con el framework simulado: **SNR 108,6 dB a
 48 y 44,1 kHz** (retardo 128 muestras), underflow -> -5 y ceros, limitador -> -4, sin escrituras
 fuera de la memoria permitida, sin dobles liberaciones. Sabotajes (longitud de frame, underflow)
 detectados.
 
-Imagen: `work/patched/ldac/ldac_v1.bin` (1.691.852 B, CRC `0x3C42F75A`, SHA-256 `bf4a2e00…`).
+Imagen: `patched/ldac/ldac_v1.bin` (1.691.852 B, CRC `0x3C42F75A`, SHA-256 `bf4a2e00…`).
 
 ### Estado al cierre del 2026-11-19
 
-- Cascos: **SBC-XQ v2** (sin LDAC). Imágenes LDAC: `work/patched/ldac/ldac_v{1,1d,2d,3d,4d}.bin`.
+- Cascos: **SBC-XQ v2** (sin LDAC). Imágenes LDAC: `patched/ldac/ldac_v{1,1d,2d,3d,4d}.bin`.
 - Funciona en hardware: arranque con H1, SEP LDAC, H5 (apertura), H3 (tabla), decoder en uso, `ldac_lib`
   creado, audio LDAC audible.
 - **Bloqueante: chasquidos fuertes** (muestras corruptas). Hipótesis por orden: (1) los pitidos de
@@ -217,11 +217,11 @@ decoder LDAC contra estas direcciones (las del overlay no sirven: hay que usar l
 
 ### Herramientas
 
-- `work/tools/mkelf.sh`: ELF de la stock con todas las regiones en su dirección de ejecución (+overlay SBC).
-- `work/tools/decomp.sh OUT ADDR...` / `work/tools/xrefs.sh ADDR...`: Ghidra headless sobre
-  `work/ghidra/stock65` (importado con `NoNonReturn.java`: Ghidra marcaba la traza `0x0C13B4B8`
+- `tools/mkelf.sh`: ELF de la stock con todas las regiones en su dirección de ejecución (+overlay SBC).
+- `tools/decomp.sh OUT ADDR...` / `tools/xrefs.sh ADDR...`: Ghidra headless sobre
+  `ghidra/stock65` (importado con `NoNonReturn.java`: Ghidra marcaba la traza `0x0C13B4B8`
   como "no retorna").
-- `work/ldac/`: `Makefile` (clang + ld.lld, Cortex-M33 hard-float), `link.ld` (blob en `0x0C1B7090`,
+- `ldac/`: `Makefile` (clang + ld.lld, Cortex-M33 hard-float), `link.ld` (blob en `0x0C1B7090`,
   `.data/.bss` en el hueco `0x200BC738`), `stock_syms.ld` (símbolos de la stock con evidencia).
   `make probe`: decoder LDAC completo = 21.656 B texto, 96 B data, 32 B bss.
 
@@ -233,7 +233,7 @@ decoder LDAC contra estas direcciones (las del overlay no sirven: hay que usar l
 5. Toolchain: clang `--target=thumbv7em-none-eabi` + `ld.lld`, script de enlace con las
    direcciones stock como símbolos; código en la flash libre (antes del trailer, moviendo
    `build_info_start` de la cabecera, o detrás con copia del trailer al final).
-6. **Vía de recuperación por PC: HECHO** (`work/tools/pc_ota3.py`, validado con la SBC-XQ v2, 57 s, flags 0). Antes: arreglar `pc_ota2.py` para copiar exactamente el flujo de la app
+6. **Vía de recuperación por PC: HECHO** (`tools/pc_ota3.py`, validado con la SBC-XQ v2, 57 s, flags 0). Antes: arreglar `pc_ota2.py` para copiar exactamente el flujo de la app
    (paquetes de 660 B, esperar `0x83` tras cada `0x82`, `0x90 00`), por si un fallo en el camino
    LDAC impidiera usar el móvil. En el móvil: desactivar "Audio HD"/códecs opcionales para los
    Fairbuds antes de probar.

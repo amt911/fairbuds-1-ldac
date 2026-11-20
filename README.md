@@ -9,13 +9,13 @@ the same way.
 
 ## What you get
 
-`work/tools/build_all.sh` builds three images from the official Fairbuds app:
+`tools/build_all.sh` builds three images from the official Fairbuds app:
 
 | Image | What it is |
 |---|---|
-| `work/patched/stock_6_5.bin` | The untouched official firmware 6.5 (to go back to stock) |
-| `work/patched/sbcxq_6_5.bin` | Official firmware with the SBC bitpool limit raised from 39 to 53 ("SBC-XQ"), nothing else |
-| `work/patched/ldac/fairbuds_6_5_ldac.bin` | SBC-XQ plus an **LDAC** decoder: 44.1 / 48 kHz, stereo, both earbuds (TWS) |
+| `patched/stock_6_5.bin` | The untouched official firmware 6.5 (to go back to stock) |
+| `patched/sbcxq_6_5.bin` | Official firmware with the SBC bitpool limit raised from 39 to 53 ("SBC-XQ"), nothing else |
+| `patched/ldac/fairbuds_6_5_ldac.bin` | SBC-XQ plus an **LDAC** decoder: 44.1 / 48 kHz, stereo, both earbuds (TWS) |
 
 Status of the LDAC build:
 
@@ -42,7 +42,7 @@ Status of the LDAC build:
   the OTA when both are present.
 - Turn your phone's Bluetooth off while flashing from the PC.
 - Every image is first checked with the same test the earbuds run before accepting an update
-  (`work/tools/besfw.py check`). The flasher only sends the final "commit" command after the earbuds
+  (`tools/besfw.py check`). The flasher only sends the final "commit" command after the earbuds
   report a valid image, so an interrupted transfer leaves the old firmware in place. If a transfer fails
   (`RX 8300`, timeouts), just run it again.
 - Do your first LDAC listening test **at low volume with the earbuds out of your ears**. Early
@@ -63,7 +63,7 @@ and downloads Sony's LDAC decoder library (`ldac_lib.a`) and header from the pub
 ## Build
 
 ```sh
-work/tools/build_all.sh /path/to/Fairbuds-5.3.0.apk
+tools/build_all.sh /path/to/Fairbuds-5.3.0.apk
 ```
 
 ## Flash
@@ -72,7 +72,7 @@ work/tools/build_all.sh /path/to/Fairbuds-5.3.0.apk
 2. Flash. The address of the paired "Fairbuds" is found automatically; pass `--addr` if you have more
    than one pair.
    ```sh
-   python3 work/tools/pc_ota3.py work/patched/ldac/fairbuds_6_5_ldac.bin
+   python3 tools/pc_ota3.py patched/ldac/fairbuds_6_5_ldac.bin
    ```
    The transfer takes about a minute and must end with `COMMIT OK`. The earbuds then restart with the
    new firmware. A log `pc_ota3_*.log` is written to the current directory.
@@ -86,7 +86,7 @@ work/tools/build_all.sh /path/to/Fairbuds-5.3.0.apk
 
 ### Going back
 
-Flash `work/patched/stock_6_5.bin` (official) or `work/patched/sbcxq_6_5.bin` (official plus SBC-XQ) the
+Flash `patched/stock_6_5.bin` (official) or `patched/sbcxq_6_5.bin` (official plus SBC-XQ) the
 same way. After flashing, BlueZ may keep showing the old codec list until you disconnect and reconnect.
 
 ## Diagnostics
@@ -95,16 +95,16 @@ The LDAC build answers a private command on the update channel with decoder stat
 late DMA periods, buffer level, CPU speed. Read them while music plays:
 
 ```sh
-python3 work/tools/ldac_stats.py            # one line per second; Ctrl-C to stop
+python3 tools/ldac_stats.py            # one line per second; Ctrl-C to stop
 ```
 
-For listening tests of a new build, `work/tools/guarded_play.py SINK FILE` plays a file and stops it at
+For listening tests of a new build, `tools/guarded_play.py SINK FILE` plays a file and stops it at
 the first anomaly in those statistics, or if the statistics stop arriving.
 
 ## How it works
 
 The official firmware is left as it is. A 26 KB add-on is appended after it, and six instructions are
-redirected to it (`work/tools/build_ldac_image.py` checks the original bytes at each site):
+redirected to it (`tools/build_ldac_image.py` checks the original bytes at each site):
 
 | Hook | Site | Purpose |
 |---|---|---|
@@ -114,7 +114,7 @@ redirected to it (`work/tools/build_ldac_image.py` checks the original bytes at 
 | H4 | earbud-initiated configuration | answer with an LDAC configuration |
 | H6 | OTA command dispatcher | statistics command `0xA5` (all other commands untouched) |
 
-The decoder (`work/ldac/src/ldac_decoder.c`) plugs Sony's library into the firmware's A2DP decoder
+The decoder (`ldac/src/ldac_decoder.c`) plugs Sony's library into the firmware's A2DP decoder
 framework. Its behaviour copies the firmware's own SBC decoder where the framework depends on it. For
 example, the TWS secondary earbud aligns itself by dropping whole packets.
 
@@ -122,32 +122,32 @@ A few things the official firmware does not do for an unknown codec, so the add-
 
 - it requests the top CPU clock with its own `sysfreq` user (the firmware resets the A2DP one);
 - it sets the playback-speed tuner's buffer target (the firmware passes 0 and drains the buffer);
-- it runs the LDAC library from a relocated copy in RAM (`work/tools/mkpayload.py`).
+- it runs the LDAC library from a relocated copy in RAM (`tools/mkpayload.py`).
 
-The lab notes, in Spanish, are in `work/FINDINGS.md` and `work/LDAC_PORT.md`.
+The lab notes, in Spanish, are in `docs/FINDINGS.md` and `docs/LDAC_PORT.md`.
 
 ## Development and tests
 
 The tests run the real ARM code of the patched image in Unicorn.
 
-- `work/ldac/test/emu_decoder.py`: the decoder fed with LDAC encoded on the host by AOSP `libldacBT_enc`,
+- `ldac/test/emu_decoder.py`: the decoder fed with LDAC encoded on the host by AOSP `libldacBT_enc`,
   compared sample by sample.
-- `work/ldac/test/emu_hooks.py`: the six patched sites.
+- `ldac/test/emu_hooks.py`: the six patched sites.
 
 Each test has a sabotage script that breaks the build on purpose and must make the test fail.
 
 ```sh
-python3 -m venv work/.venv && work/.venv/bin/pip install unicorn capstone
-make -C work/ldac addon
-python3 work/tools/build_ldac_image.py --blob work/ldac/build/addon.elf --out /tmp/ldac.bin
-work/.venv/bin/python work/ldac/test/emu_hooks.py   /tmp/ldac.bin work/ldac/build/addon.elf
-work/.venv/bin/python work/ldac/test/emu_decoder.py /tmp/ldac.bin work/ldac/build/addon.elf   # needs libldacBT_enc.so
-work/.venv/bin/python work/ldac/test/sabotage_hooks.py /tmp/ldac.bin work/ldac/build/addon.elf
-work/ldac/test/sabotage_decoder.sh
+python3 -m venv .venv && .venv/bin/pip install unicorn capstone
+make -C ldac addon
+python3 tools/build_ldac_image.py --blob ldac/build/addon.elf --out /tmp/ldac.bin
+.venv/bin/python ldac/test/emu_hooks.py   /tmp/ldac.bin ldac/build/addon.elf
+.venv/bin/python ldac/test/emu_decoder.py /tmp/ldac.bin ldac/build/addon.elf   # needs libldacBT_enc.so
+.venv/bin/python ldac/test/sabotage_hooks.py /tmp/ldac.bin ldac/build/addon.elf
+ldac/test/sabotage_decoder.sh
 ```
 
-Reverse-engineering helpers (Ghidra headless) are in `work/tools/{mkelf,decomp,xrefs}.sh` and
-`work/ghidra_scripts/`.
+Reverse-engineering helpers (Ghidra headless) are in `tools/{mkelf,decomp,xrefs}.sh` and
+`ghidra_scripts/`.
 
 ## Credits and legal
 

@@ -119,11 +119,11 @@ CRC: `java.util.zip.CRC32`, little-endian.
 
 Implementación decompilada:
 
-- `work/jadx/sources/s9/d.java` — packet builder.
-- `work/jadx/sources/s9/e.java` — máquina de estados.
-- `work/jadx/sources/s9/a.java` — CRC y helpers.
-- `work/jadx/sources/com/fairphone/fairsound/core/bluetooth_api/bluetooth/protocol/tws/TWSCommand.java` — QXW.
-- `work/jadx/sources/com/fairphone/fairsound/core/bluetooth_api/bluetooth/protocol/tws/TWSServiceManager.java` — UUIDs y flujo.
+- `jadx/sources/s9/d.java` — packet builder.
+- `jadx/sources/s9/e.java` — máquina de estados.
+- `jadx/sources/s9/a.java` — CRC y helpers.
+- `jadx/sources/com/fairphone/fairsound/core/bluetooth_api/bluetooth/protocol/tws/TWSCommand.java` — QXW.
+- `jadx/sources/com/fairphone/fairsound/core/bluetooth_api/bluetooth/protocol/tws/TWSServiceManager.java` — UUIDs y flujo.
 
 ## Lectura de versión (solo lectura, cero riesgo)
 
@@ -233,11 +233,11 @@ Esto simplifica el cliente frente a BLE GATT.
 
 ## Parche SBC-XQ (imagen + APK)
 
-- Imagen: `work/patched/fw_fairbuds_6_5_sbcxq.bin`
+- Imagen: `patched/fw_fairbuds_6_5_sbcxq.bin`
   - SBC caps `3f ff 02 35` (bitpool máx 53).
   - CRC32 del trailer: `0xDF6FC562`.
   - SHA-256: `eb99e824b0069357d588c729f0dde35abbadc07870484a67d5c15587f2fd9155`.
-- APK parcheado: `work/patched/Fairbuds_6_6_sbcxq.apk`
+- APK parcheado: `patched/Fairbuds_6_6_sbcxq.apk`
   - `FirmwareBuild.FAIRBUDS` 6.5 -> 6.6 en smali.
   - `res/raw/fw_fairbuds_6_6.bin` = imagen SBC-XQ.
   - Firmado v1/v2/v3 con uber-apk-signer (debug key).
@@ -334,30 +334,30 @@ tras `0x82`) difiere; su fallo con la stock sigue sin explicar y ya no bloquea.
 
 ### Herramienta
 
-`work/tools/besfw.py` emula el check del device (`check`), parchea y rehace el trailer
+`tools/besfw.py` emula el check del device (`check`), parchea y rehace el trailer
 (`patch IN OUT OFF:OLD:NEW`) y tiene `selftest` con sabotajes: predice los tres resultados
 reales de la app (stock `01`, C `00`, B `00`).
 
 ### Imagen SBC-XQ corregida
 
-- `work/patched/fw_fairbuds_6_5_sbcxq_v2.bin`: `besfw.py patch ... 14423B:27:35`
+- `patched/fw_fairbuds_6_5_sbcxq_v2.bin`: `besfw.py patch ... 14423B:27:35`
   - trailer `CRC32_OF_IMAGE=0xDF6FC562`, CRC32 del fichero `0x4D6E0D2C`
   - SHA-256 `2ed30f2bd353e72cc0af33e66c2aa39338cf0a1151dede9a976b5be90776eba0`
   - diff con la stock: `0x14423B` + 7 dígitos del trailer.
-- APK instrumentada: `work/arm64/signed/base_sbcxq2_unsigned-aligned-debugSigned.apk`
+- APK instrumentada: `arm64/signed/base_sbcxq2_unsigned-aligned-debugSigned.apk`
   (`res/raw/fw_fairbuds_6_6.bin` = v2, verificada con `besfw.py check`).
 - La selección de config SBC (`0x2C0C0340`..) es intersección estándar
   (`max = min(remoto, local)`); no hay otro 39 fijo. El SDK BES usa 52 por defecto.
-- Restaurar stock: `work/arm64/signed/base_stocktest_unsigned-aligned-debugSigned.apk`
+- Restaurar stock: `arm64/signed/base_stocktest_unsigned-aligned-debugSigned.apk`
   (ya commiteó la stock el 14:10).
 
 ## RESULTADO: SBC-XQ (bitpool 53) flasheado y funcionando (2026-11-19, 17:03-17:10)
 
 - Flasheo con la app instrumentada en un Pixel 9 Pro XL (`base_sbcxq2`), log
-  `work/logs/app_ota_sbcxq2_pixel.log`: datos enviados == `fw_fairbuds_6_5_sbcxq_v2.bin`
+  `logs/app_ota_sbcxq2_pixel.log`: datos enviados == `fw_fairbuds_6_5_sbcxq_v2.bin`
   (CRC `0x4D6E0D2C`), 51/51 segmentos `83 01`, `0x88` -> `84 01` -> `0x92` -> `93 01`.
 - Arranca: tras el reinicio se reconectó al Pixel como dispositivo A2DP activo.
-- Caps leídos por BlueZ tras re-emparejar el PC (`work/logs/pc_repair_probe.log`,
+- Caps leídos por BlueZ tras re-emparejar el PC (`logs/pc_repair_probe.log`,
   D-Bus `.../sep1` Capabilities): SBC `3f ff 02 35` (max bitpool **53**), AAC sin cambios.
 - Perfil PipeWire `a2dp-sink-sbc`: configuración negociada `11 15 02 35` (44.1 kHz,
   joint stereo, 16 bloques, 8 subbandas, bitpool 2..53). 30 s de streaming (barrido +
@@ -374,7 +374,7 @@ Síntoma: tras las OTAs, sin audio A2DP en ambos cascos con cualquier codec y cu
 ANC/transparencia funcionaban.
 
 Descartado: el parche SBC-XQ. Se restauró la stock 6.5 exacta (`84 01` -> `93 01`,
-log `work/logs/app_ota_restore_stock_pixel.log`) y seguía sin sonar.
+log `logs/app_ota_restore_stock_pixel.log`) y seguía sin sonar.
 
 Causa: EQ. Al elegir un preset predefinido en la app volvió el sonido.
 - `set_user_eq_mode` (`0x2C11F8E0`): modos 0-4 = presets; **modo 5 = EQ personalizado**, carga
@@ -396,23 +396,23 @@ Otros datos de esta investigación:
 
 ## Port LDAC
 
-Ver `work/LDAC_PORT.md` (fase 1 de viabilidad completada el 2026-11-19).
+Ver `docs/LDAC_PORT.md` (fase 1 de viabilidad completada el 2026-11-19).
 Estado de los cascos al cierre: **SBC-XQ v2 flasheada** (`4D6E0D2C`), funcionando.
 
 ## Cliente OTA de PC validado (2026-11-19, ~18:40) — vía de recuperación sin móvil
 
-`work/tools/pc_ota3.py` (copia el flujo de la app: `0x97`, `0x8E`, `0x90 00`, `0x8C`, `0x80`, `0x86`,
+`tools/pc_ota3.py` (copia el flujo de la app: `0x97`, `0x8E`, `0x90 00`, `0x8C`, `0x80`, `0x86`,
 paquetes de MTU-9 = 660 B, segmentos de 32768 B esperando `0x83 01` tras cada `0x82`, `0x88`, `0x92`
 solo tras `84 01`). Config `0x86` con **flags 0** (sin borrar datos de usuario ni reescribir factory);
 con `--app-flags` genera byte a byte el config de la app.
 Prueba: reflasheo de la SBC-XQ v2 instalada desde el PC (Pixel con BT apagado): 51/51 segmentos,
 `84 01` -> `93 01` en **57 s**; los cascos se reinician, reconectan y anuncian `3f ff 02 35`.
-Log: `work/logs/pc_ota3_20261119_190344.log`. El cliente se niega a enviar imágenes que fallarían el check del device (besfw).
+Log: `logs/pc_ota3_20261119_190344.log`. El cliente se niega a enviar imágenes que fallarían el check del device (besfw).
 
 ## Etapa 3a superada: imagen más larga con bloque añadido (2026-11-19, ~19:25)
 
-`work/patched/ldac/stage3a_blob_nohooks.bin` (SBC-XQ + blob de 636 B inerte en `0x0C1B7090` + copia del
-trailer al final; 1.668.280 B; CRC `0x4F8417C2`), montada con `work/tools/build_ldac_image.py --no-hooks`.
+`patched/ldac/stage3a_blob_nohooks.bin` (SBC-XQ + blob de 636 B inerte en `0x0C1B7090` + copia del
+trailer al final; 1.668.280 B; CRC `0x4F8417C2`), montada con `tools/build_ldac_image.py --no-hooks`.
 Flasheo por PC (`pc_ota3.py`): `84 01` -> `93 01` en 62 s. Tras el reinicio: reconecta, anuncia SBC
 `3f ff 02 35` y AAC, y el OTA responde a `0x8E`. Conclusión: el bootloader acepta y arranca imágenes
 más largas que la stock con el trailer reubicado.
@@ -469,14 +469,14 @@ RAM, o más frecuencia.
   dentro de decode con el **timer de sistema** `0x40002004` (accesor stock `0x0C0276E8` = `-valor`;
   DWT/DEMCR evitados: la stock solo usa DWT para calibrar y lo deja apagado, y el SCS exige privilegio),
   descartes por memoria/limitador, máximos de lista, sync/discards, heap libre mínimo.
-  Lector PC: `work/tools/ldac_stats.py` (calcula carga = busy/wall y calibra el timer con muestras/fs).
+  Lector PC: `tools/ldac_stats.py` (calcula carga = busy/wall y calibra el timer con muestras/fs).
 - **Unicorn 2.1.4**: un `UC_HOOK_MEM_WRITE` global deja un estado IT obsoleto tras un store
   condicional (`it lo; strlo.w`) y el bloque siguiente se salta una instrucción; redirigir PC desde un
   hook de código tampoco es fiable. `emu_decoder.py` ahora usa stubs `bx lr` reales y un diff de RAM
   para escrituras fuera de sitio (sabotaje "stray write" detectado).
 - Verificación: emu_decoder ALL PASS (108,6 dB, continuidad, estadísticas exactas), emu_hooks ALL PASS
   (H1..H6), sabotajes: 5/5 decoder, 8/8 ganchos.
-- Imagen: `work/patched/ldac/ldac_v6a.bin` (CRC 0xCE79BC11). Plan en el device: leer stats con SBC
+- Imagen: `patched/ldac/ldac_v6a.bin` (CRC 0xCE79BC11). Plan en el device: leer stats con SBC
   (espera "sin stream"), luego LDAC con volumen 0 % y silencio digital; nadie escucha.
 
 ## Medidas en el device con estadísticas (v6a..v6h, 2026-11-19 22:20-23:05; volumen 0 %, silencio, nadie escucha)
@@ -513,7 +513,7 @@ RAM, o más frecuencia.
 - Arreglo: usuario propio de sysfreq **0x1e** (la stock usa 0x0, 0x5, 0xc..0x1b; `hal_sysfreq_req`
   acepta 0..0x25, gana el máximo) nivel 8 en init, liberado (`(0x1e, 0)`) en deinit.
 - Además (v7a): `ldac_lib` se ejecuta desde una copia reubicada en el heap A2DP (alias RAMX), payload
-  de 22 KB enlazado en 0x10000000 (`work/tools/mkpayload.py`, solo ABS32, `-mno-movt`, checksum,
+  de 22 KB enlazado en 0x10000000 (`tools/mkpayload.py`, solo ABS32, `-mno-movt`, checksum,
   alineación a 8 hecha por el cargador). Por sí sola NO mejoró la carga (49-51 % a 104 MHz: no era la
   flash); se mantiene porque funciona en el chip (bloque 0x20020020) y libera el hueco de RAM.
 - Resultado v7d (48 kHz, silencio y ruido rosa -6 dBFS con volumen hw 0): CPU 208 MHz en reproducción
@@ -558,7 +558,7 @@ RAM, o más frecuencia.
   11:11:07. Sin el ratón, la canción entera: 0 underflows/late/slow/reinicios, lista ~62.
 - El sintonizador de la stock acelera +0,29 % pero apenas frena (0,99992): el nivel perdido en un
   hueco de radio no se recupera hasta un underflow+reinicio. v7g: objetivo 120 frames (320 ms).
-  Tests y 14+8 sabotajes OK; `work/patched/ldac/ldac_v7g.bin`, NO flasheada aún.
+  Tests y 14+8 sabotajes OK; `patched/ldac/ldac_v7g.bin`, NO flasheada aún.
 - Con batería 20 %: la sonda OTA `0x8E` no respondía (en TWS el maestro consulta al otro casco antes de
   contestar) y un OTA completo se quedó sin acuse del último segmento con reinicio del casco (inits a 2):
   probable caída de tensión al escribir flash. Nada aplicado; siguen con v7f. Cargar antes de flashear.

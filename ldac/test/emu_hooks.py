@@ -5,7 +5,7 @@ Each test starts at the real patch site in the patched stock code and runs until
 to stock code, then checks: where execution resumes, registers preserved, flags, every memory write
 (must hit only allowed ranges) and the arguments passed to stock functions (stubbed).
 
-Usage: work/.venv/bin/python work/ldac/test/emu_hooks.py IMAGE.bin BLOB.elf
+Usage: .venv/bin/python ldac/test/emu_hooks.py IMAGE.bin BLOB.elf
 """
 import struct
 import subprocess

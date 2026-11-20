@@ -4,17 +4,16 @@
 #   * the official Fairbuds Android app (APK), which ships firmware 6.5 as res/raw/fw_fairbuds_6_5.bin
 #   * Sony's LDAC decoder library and header, downloaded from the public OpenPineBuds SDK (pinned
 #     commit, checked by SHA-256)
-# Outputs in work/patched/:
+# Outputs in patched/:
 #   stock_6_5.bin               the untouched official firmware (to go back to stock)
 #   sbcxq_6_5.bin               stock + SBC bitpool 53 ("SBC-XQ"), nothing else
 #   ldac/fairbuds_6_5_ldac.bin  stock + SBC-XQ + LDAC
-# Usage: work/tools/build_all.sh PATH/TO/Fairbuds.apk
+# Usage: tools/build_all.sh PATH/TO/Fairbuds.apk
 # Needs: unzip, curl, sha256sum, python3, clang and ld.lld (LLVM), make.
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
-w="$root/work"
-apk="${1:?usage: work/tools/build_all.sh PATH/TO/Fairbuds.apk}"
+w="$(cd "$(dirname "$0")/.." && pwd)"
+apk="${1:?usage: tools/build_all.sh PATH/TO/Fairbuds.apk}"
 
 STOCK_SHA=97e96e2b6ef953b7d27da6952515e6356e775e60e7487338ffd66e1e702c89a1
 LIB_SHA=47788c136c1e82c0609abfc1fbc9e5c388b366f521b4df0ecdb119c1f610a26b
@@ -57,4 +56,4 @@ echo "== device-side check of every image (what the earbuds verify before accept
 for f in "$w/patched/stock_6_5.bin" "$w/patched/sbcxq_6_5.bin" "$w/patched/ldac/fairbuds_6_5_ldac.bin"; do
   python3 "$w/tools/besfw.py" check "$f" | tail -1
 done
-echo "done: images in work/patched/"
+echo "done: images in patched/"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Decompile stock fw functions with Ghidra headless (read-only project).
-# Usage: work/tools/decomp.sh OUTFILE ADDR [ADDR...]   (addresses like 0x2C0BFBC8)
-# Project: work/ghidra/stock65 (built from work/tools/mkelf.sh: flash at 0x2C020000 + RAM copies).
+# Usage: tools/decomp.sh OUTFILE ADDR [ADDR...]   (addresses like 0x2C0BFBC8)
+# Project: ghidra/stock65 (built from tools/mkelf.sh: flash at 0x2C020000 + RAM copies).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 out="$1"; shift

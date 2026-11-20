@@ -16,7 +16,7 @@ Safety checks (the build fails if any is violated):
   * size <= 0x1E0000 (device limit, 0x2C0AB148); besfw.device_check passes.
 
 Usage:
-  build_ldac_image.py --blob work/ldac/build/X.elf --out OUT.bin [--no-hooks] [--no-sbcxq]
+  build_ldac_image.py --blob ldac/build/X.elf --out OUT.bin [--no-hooks] [--no-sbcxq]
 """
 import argparse
 import hashlib

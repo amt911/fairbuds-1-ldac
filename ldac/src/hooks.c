@@ -1,4 +1,4 @@
-/* LDAC add-on: C side of the four stock patches (see work/LDAC_PORT.md, "Diseño de ganchos").
+/* LDAC add-on: C side of the four stock patches (see docs/LDAC_PORT.md, "Diseño de ganchos").
  *   H1 0x0C0BF8FA  bl stock_aac_setup      -> bl ldac_boot_hook
  *   H2 0x0C0C027A  cmp.w r8,#0             -> bl ldac_cfg_hook        (hooks_asm.S)
  *   H3 0x0C127876  bl memcpy (SBC table)   -> bl ldac_dec_copy_hook

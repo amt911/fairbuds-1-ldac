@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """PC OTA client for Fairbuds 1 (BES, SPP/RFCOMM channel 13), mirroring the Fairbuds app flow
-that is verified to work (work/logs/app_ota_*_pixel.log):
+that is verified to work (logs/app_ota_*_pixel.log):
 
   0x97 01 -> 0x98 | 0x8E BEST -> 0x8F | 0x90 00 -> 0x91 01 | 0x8C BEST+code+crc -> 0x8D
   0x80 BEST size crc -> 0x81 (MTU) | 0x86 config -> 0x87 01
@@ -13,7 +13,7 @@ Differences from the app, on purpose:
     (the app always sends 0x1f). Use --app-flags to send exactly what the app sends.
   * 0x9D / 0x9B are not sent (the device never answers them; the app waits 10 s for each).
 Safety:
-  * the image must pass work/tools/besfw.py device_check (what the device checks on 0x88);
+  * the image must pass tools/besfw.py device_check (what the device checks on 0x88);
   * 0x92 (commit) is sent only after 0x84 01; any other answer aborts without committing;
   * a non-zero resume breakpoint in 0x8D aborts (resume is not implemented).
 

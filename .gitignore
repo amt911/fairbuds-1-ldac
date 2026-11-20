@@ -9,18 +9,12 @@
 *.log
 __pycache__/
 .venv/
-work/apk/
-work/apk_decoded/
-work/jadx/
-work/arm64/
-work/ghidra/
-work/fw/
-work/logs/
-work/patched/
-work/ldac/build/
-work/ldac/lib/
-work/ldac/inc/
-# research leftovers (device-specific addresses, screenshots, session notes)
-work/*.py
-work/*.png
-work/HANDOFF_PROMPT.md
+apk/
+patched/
+logs/
+ghidra/
+ldac/build/
+ldac/lib/
+ldac/inc/
+# local research leftovers (decompiled app, device-specific scripts, screenshots, session notes)
+work/
