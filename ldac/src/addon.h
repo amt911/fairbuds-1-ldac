@@ -40,6 +40,33 @@ typedef struct {
     uint16_t cpu_loop_runs;    /* number of such measurements */
 } ldac_stats_t;
 _Static_assert(sizeof(ldac_stats_t) == 120, "stats layout is shared with tools/ldac_stats.py");
+/* "Black box" kept in the RAM gap across streams and phone sessions, read by the PC afterwards
+ * (request A5 'B' 'E' 'S' 'D', reply A7, size, struct). Records the codec configuration events and
+ * how the last streams went, for cases the PC cannot watch live (e.g. a phone changing the LDAC
+ * sample rate: the earbuds accept one connection at a time). */
+#define LDAC_DBG_VER 1
+typedef struct {
+    uint8_t hook;        /* 2: H2 reconfigure, 4: H4 earbud-initiated config, 5: H5 stream open */
+    uint8_t type, len;   /* codec type and element length from the stack's codec struct */
+    uint8_t applied;     /* 1: LDAC applied to the device context (H2/H5), H4: sample-rate byte written */
+    uint8_t e[8];        /* codec elements (vendor id, codec id, rate, channel mode) */
+} ldac_dbg_ev_t;
+typedef struct {
+    uint8_t ver, n_ev;               /* n_ev: events since boot (ev[] is a ring of 4) */
+    uint8_t bad_hdr[4];              /* first 4 bytes of the first bad frame of the last stream */
+    uint8_t rate_fixes;              /* restarts requested because frames came at another rate */
+    uint8_t frame_rate_id;           /* sampling-rate id of the last packet's first frame (0 44.1k, 1 48k) */
+    ldac_dbg_ev_t ev[4];
+    uint32_t init_fs[2];             /* decoder init sample rate: last, previous */
+    uint32_t prev_frames, prev_bad, prev_underflows;   /* of the last finished stream */
+} ldac_dbg_t;
+_Static_assert(sizeof(ldac_dbg_t) == 76, "debug record layout is shared with tools/ldac_stats.py");
+extern ldac_dbg_t ldac_dbg;
+
+/* The frames run at `rate` but the device context says otherwise: point the context at `rate`
+ * (hooks.c). Returns 1 if it was changed. */
+int ldac_set_ctx_rate(uint32_t rate);
+
 /* Statistics of the open LDAC stream, NULL when none (ldac_decoder.c). */
 const ldac_stats_t *ldac_stats_get(void);
 #endif

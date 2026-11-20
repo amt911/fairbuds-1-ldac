@@ -45,7 +45,10 @@ def h6_op(v):      # `cmp r3, #0xa5` in ldac_dbg_hook -> #0xa6 (request never an
 def h6_exit(v):    # `movs r3, #0xff` -> #0x8e (after a reply, the stock would run its 0x8E case)
     i = blob_find(bytes.fromhex("ff23"), "ldac_dbg_hook"); v[i] = 0x8E
 
-ok = all([variant("H6 opcode", h6_op), variant("H6 exit to stock default", h6_exit), variant("H5 flags", h5_cmp), variant("H2 SBC clears LDAC flag", h2_flagclear), variant("H2 flags", h2_cmp), variant("H4 return address", h4_ret),
+def h2_hook_id(v):  # `movs r2, #2` (black box hook id) in ldac_cfg_hook -> #3
+    i = blob_find(bytes.fromhex("0222"), "ldac_cfg_hook"); v[i] = 3
+
+ok = all([variant("H2 black box hook id", h2_hook_id), variant("H6 opcode", h6_op), variant("H6 exit to stock default", h6_exit), variant("H5 flags", h5_cmp), variant("H2 SBC clears LDAC flag", h2_flagclear), variant("H2 flags", h2_cmp), variant("H4 return address", h4_ret),
           variant("LDAC caps", caps), variant("H3 BL target", h3_target)])
 print("all sabotages caught" if ok else "SOME SABOTAGE MISSED")
 sys.exit(0 if ok else 1)

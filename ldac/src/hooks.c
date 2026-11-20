@@ -88,24 +88,72 @@ void ldac_boot_hook(int dev)
 uint8_t ldac_cfg_flag;     /* 1 after an LDAC stream configuration, 0 after an SBC one */
 uint8_t ldac_swap_mode;    /* diagnostics: 1 = H3 selected LDAC via dev ctx, 2 = via ldac_cfg_flag */
 
-void ldac_cfg_apply(const uint8_t *codec, uint8_t *ctx)
+ldac_dbg_t ldac_dbg;       /* .bss in the RAM gap: zeroed at boot by ram_init */
+
+static ldac_dbg_ev_t *dbg_event(uint8_t hook, const uint8_t *codec)
+{
+    ldac_dbg_ev_t *ev = &ldac_dbg.ev[ldac_dbg.n_ev & 3];
+    const uint8_t *e;
+    ldac_dbg.ver = LDAC_DBG_VER;
+    ldac_dbg.n_ev++;
+    ev->hook = hook;
+    ev->type = codec[0];
+    ev->len = codec[1];
+    ev->applied = 0;
+    __builtin_memcpy(&e, codec + 2, sizeof e);
+    for (int i = 0; i < 8; i++) ev->e[i] = (e && i < codec[1]) ? e[i] : 0;
+    return ev;
+}
+
+static uint8_t ldac_fs_hint;   /* last LDAC rate flag applied or chosen in H4 (0: none yet) */
+
+void ldac_cfg_apply(const uint8_t *codec, uint8_t *ctx, uint32_t hook)
 {
     const uint8_t *e;
+    ldac_dbg_ev_t *ev = dbg_event((uint8_t)hook, codec);
     if (codec[0] == CODEC_SBC) {
         ldac_cfg_flag = 0;
         return;
     }
     __builtin_memcpy(&e, codec + 2, sizeof e);
-    if (codec[1] < 8 || !is_sony_ldac(e))
-        return;                                   /* unknown vendor codec: stock behaviour */
-    uint8_t fs = e[6] & (LDAC_FS_44100 | LDAC_FS_48000);
-    if (fs != LDAC_FS_44100 && fs != LDAC_FS_48000)
-        return;                                   /* not a configuration we advertised */
+    uint8_t fs;
+    if (codec[0] == CODEC_VENDOR && codec[1] == 0) {
+        /* Empty vendor codec struct: the stack does not copy vendor codec information on an AVDTP
+         * reconfigure (H2) nor on the open that follows an earbud-initiated configuration (H5)
+         * (black box, 2026-11-20). Our LDAC endpoint is the only vendor one we register, so this
+         * is LDAC: use the last known rate; if the phone picked another one, the decoder sees it in
+         * the frame headers and restarts the player at that rate (ldac_store). */
+        fs = ldac_fs_hint ? ldac_fs_hint : LDAC_FS_48000;
+        ev->applied = 2;
+    } else {
+        if (codec[1] < 8 || !is_sony_ldac(e))
+            return;                               /* unknown vendor codec: stock behaviour */
+        fs = e[6] & (LDAC_FS_44100 | LDAC_FS_48000);
+        if (fs != LDAC_FS_44100 && fs != LDAC_FS_48000)
+            return;                               /* not a configuration we advertised */
+        ev->applied = 1;
+    }
+    ldac_fs_hint = fs;
     ctx[0x3f] = fs;          /* SBC sample-rate flag encoding happens to match LDAC's */
     ctx[0x40] = 0x10;        /* 16-bit */
     ctx[0x42] = 2;           /* stereo */
     ctx[0x4a] = CODEC_VENDOR;
     ldac_cfg_flag = 1;
+}
+
+/* A phone that changes the LDAC sample rate (Android developer options) sends an AVDTP reconfigure;
+ * the stack reaches H2 with an empty codec struct for vendor codecs (black box: type 0xFF, len 0),
+ * so the context keeps the old rate and every frame is rejected. The decoder notices from the frame
+ * headers and calls this, then asks the player to restart (ldac_store). */
+int ldac_set_ctx_rate(uint32_t rate)
+{
+    uint8_t *ctx = stock_dev_ctx(stock_cur_a2dp_dev());
+    uint8_t fs = rate == 44100 ? LDAC_FS_44100 : rate == 48000 ? LDAC_FS_48000 : 0;
+    if (!ctx || !fs || ctx[0x4a] != CODEC_VENDOR)
+        return 0;
+    ctx[0x3f] = fs;
+    ldac_fs_hint = fs;
+    return 1;
 }
 
 /* H4 (from hooks_asm.S): the earbud initiates the configuration and the remote SEP is a vendor
@@ -115,6 +163,7 @@ void ldac_cfginit_apply(const uint8_t *remote, uint8_t *cfg)
 {
     const uint8_t *e;
     uint8_t *out;
+    ldac_dbg_ev_t *ev = dbg_event(4, remote);
     __builtin_memcpy(&e, remote + 2, sizeof e);
     __builtin_memcpy(&out, cfg + 2, sizeof out);
     if (remote[1] < 8 || !is_sony_ldac(e) || !out)
@@ -126,6 +175,8 @@ void ldac_cfginit_apply(const uint8_t *remote, uint8_t *cfg)
     for (int i = 0; i < 6; i++) out[i] = ldac_caps[i];
     out[6] = (fs & LDAC_FS_48000) ? LDAC_FS_48000 : LDAC_FS_44100;
     out[7] = LDAC_CM_STEREO;
+    ev->applied = out[6];
+    ldac_fs_hint = out[6];         /* the open that follows may come with an empty codec struct */
 }
 
 /* H3: replaces memcpy(ctx_decoder, sbc_decoder_table, 0x70) in a2dp_audio_init's SBC branch. */
@@ -156,7 +207,7 @@ extern uint8_t ldac_cfg_flag, ldac_swap_mode;
 void ldac_dbg_request(const uint8_t *pkt, uint32_t len)
 {
     (void)len;
-    if (!pkt || pkt[1] != 'B' || pkt[2] != 'E' || pkt[3] != 'S' || pkt[4] != 'T')
+    if (!pkt || pkt[1] != 'B' || pkt[2] != 'E' || pkt[3] != 'S' || (pkt[4] != 'T' && pkt[4] != 'D'))
         return;
     if (OTA_ROLE != 2 || OTA_ENV[0xB0] == 1)
         return;
@@ -165,6 +216,15 @@ void ldac_dbg_request(const uint8_t *pkt, uint32_t len)
     if (!tx)
         return;
     uint8_t buf[2 + sizeof(ldac_stats_t)] __attribute__((aligned(4)));
+    _Static_assert(sizeof(ldac_stats_t) >= sizeof(ldac_dbg_t), "reply buffer");
+    if (pkt[4] == 'D') {                         /* black box */
+        const uint8_t *d = (const uint8_t *)&ldac_dbg;
+        buf[0] = 0xA7;
+        buf[1] = sizeof(ldac_dbg_t);
+        for (uint32_t i = 0; i < sizeof(ldac_dbg_t); i++) buf[2 + i] = d[i];
+        tx(buf, 2 + sizeof(ldac_dbg_t));
+        return;
+    }
     const uint8_t *s = (const uint8_t *)ldac_stats_get();
     buf[0] = 0xA6;
     buf[1] = s ? sizeof(ldac_stats_t) : 0;   /* 0: no LDAC stream open */

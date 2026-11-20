@@ -37,7 +37,7 @@ STUBS = {
     0x0C126B98: "list_begin", 0x0C126C30: "list_node", 0x0C127D68: "lastframe_set",
     0x00271FB8: "syspool_get_buff", 0x00271FA4: "syspool_free_size",
     0x0C0C2858: "aac_setup", 0x0C103444: "btif_register", 0x0C13B4B8: "trace",
-    0x0C123938: "sysfreq_req",
+    0x0C123938: "sysfreq_req", 0x0C0C3D44: "cur_a2dp_dev",
 }
 FAIL = []
 
@@ -413,8 +413,12 @@ def main():
         check(rc == 0xFFFFFFFB and b"\x55\x55\x55\x55" not in got and got[1024:] == b"\0" * (6144 - 1024),
               f"{sr}: underflow rc {rc:#x} -> carried tail then silence")
         check(stats(fw, S)["underflows"] == 1, f"{sr}: stats underflow counted ({stats(fw, S)['underflows']})")
+        st_end = stats(fw, S)
         fw.call(deinit)
         check(fw.sysfreq == (0x1E, 0), f"{sr}: sysfreq released at deinit ({fw.sysfreq})")
+        bb = struct.unpack_from("<2I3I", bytes(fw.u.mem_read(S["ldac_dbg"] + 56, 20)))
+        check(bb[0] == sr and bb[2] == st_end["frames"] and bb[3] == st_end["bad_frames"] == 0 and bb[4] == st_end["underflows"],
+              f"{sr}: black box init_fs {bb[:2]} prev frames/bad/underflows {bb[2:]} vs {st_end['frames']}/{st_end['bad_frames']}/{st_end['underflows']}")
         fw.misalign = False
         check(fw.call(S["ldac_stats_get"]) == 0, f"{sr}: no stats after deinit")
         check(not fw.live, f"{sr}: heap blocks leaked after deinit: {len(fw.live)}")
@@ -497,6 +501,34 @@ def main():
     first_limit = rcs.index(0xFFFFFFFC) if 0xFFFFFFFC in rcs else None
     check(first_limit is not None and 380 <= 2 * first_limit < 400 and len(fw.list) < 400,
           f"limiter: first -4 at {first_limit} packets, list {len(fw.list)}, rc set {set(rcs)}")
+    # rate mismatch (a phone reconfigured 48 -> 44.1 kHz; H2 got an empty codec struct): the first
+    # packet fixes the device context and asks for a restart (-6), later ones are dropped; the
+    # restarted stream at 44.1 kHz is accepted; never more than 3 restarts in a row
+    def store_first(sr_cfg, pk):
+        fw.fresh_heap()
+        fw.u.mem_write(CFG, struct.pack("<IBBHIf", sr_cfg, 2, 16, 0, 128, 1.0))
+        fw.call(init, CFG, CTX)
+        rcs = []
+        for nfr, payload in pk:
+            fw.u.mem_write(PAY, bytes([nfr]) + payload)
+            rcs.append(fw.call(store, HDR, PAY, len(payload) + 1) & 0xFFFFFFFF)
+        n = len(fw.list)
+        fw.call(deinit)
+        return rcs, n
+    fw.u.mem_write(ctx_base + 0x4a, b"\xff")
+    fw.u.mem_write(ctx_base + 0x3f, b"\x10")
+    fixes0 = fw.u.mem_read(S["ldac_dbg"] + 6, 1)[0]
+    _, pk441 = encode_ldac(44100, 0.2, 1000)
+    rcs, n = store_first(48000, pk441[:3])
+    check(rcs == [0xFFFFFFFA, 0, 0] and n == 0 and fw.u.mem_read(ctx_base + 0x3f, 1)[0] == 0x20,
+          f"rate mismatch: store rcs {[hex(r) for r in rcs]}, list {n}, ctx+3f {fw.u.mem_read(ctx_base + 0x3f, 1)[0]:#x}")
+    check(fw.u.mem_read(S["ldac_dbg"] + 6, 2) == bytes([fixes0 + 1, 0]), "rate mismatch: black box rate_fixes/frame_rate_id")
+    rcs, n = store_first(44100, pk441[:3])
+    check(rcs == [0, 0, 0] and n > 0, f"rate fixed: store rcs {[hex(r) for r in rcs]}, list {n}")
+    asked = [store_first(48000, pk441[:1])[0][0] for _ in range(4)]
+    check(asked == [0xFFFFFFFA] * 3 + [0], f"rate mismatch restarts capped at 3: {[hex(r) for r in asked]}")
+    fw.u.mem_write(ctx_base + 0x4a, b"\x00")
+
     bad = fw.stray_writes(ram_before)
     check(not bad, f"writes outside allowed memory: {[hex(a) for a in bad[:5]]}")
     print("ALL PASS" if not FAIL else f"{len(FAIL)} FAILURES")

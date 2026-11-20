@@ -75,6 +75,7 @@ typedef struct {
     void *lib_allocs[LIB_ALLOCS_MAX];
     ldac_stats_t stats;
     uint8_t pcm[FRAME_PCM_MAX];
+    uint8_t rate_fix_asked;           /* this stream already asked for a rate restart */
 } blk_t;
 static lastframe_t *g_last;
 #define BLK    ((blk_t *)g_last)
@@ -82,6 +83,8 @@ static lastframe_t *g_last;
 #define ST     (&BLK->stats)
 #define g_lib_allocs (BLK->lib_allocs)
 static uint16_t g_inits, g_deinits;   /* since boot */
+static uint8_t g_rate_fixes;          /* consecutive streams that asked for a rate restart */
+#define RATE_FIX_MAX 3                /* never loop: give up (silence) after 3 in a row */
 static uint32_t g_frame_samples;
 /* Where ldac_lib gets its memory: the stock syspool may not have the 16 KB it needs while an
  * A2DP stream is open, so prefer the A2DP heap (allocations tracked and freed in deinit). */
@@ -246,6 +249,8 @@ static uint16_t cpu_loop_ticks_n(uint32_t n)
 static int ldac_init(out_cfg_t *cfg, void *context)
 {
     g_inits++;
+    ldac_dbg.init_fs[1] = ldac_dbg.init_fs[0];
+    ldac_dbg.init_fs[0] = cfg->sample_rate;
     g_pool = POOL_NONE;
     g_ctx = context;
     if (*(uint16_t *)(g_ctx + 0x16) == 0)          /* written by a2dp_audio_init just before us */
@@ -305,6 +310,11 @@ static int ldac_init(out_cfg_t *cfg, void *context)
 static int ldac_deinit(void)
 {
     g_deinits++;
+    if (g_last) {
+        ldac_dbg.prev_frames = ST->frames;
+        ldac_dbg.prev_bad = ST->bad_frames;
+        ldac_dbg.prev_underflows = ST->underflows;
+    }
     stock_sysfreq_req(LDAC_FREQ_USER, 0);
     if (g_h && g_ram) g_ram->free_handle(g_h);
     g_h = NULL;
@@ -411,6 +421,8 @@ static int ldac_decode_frame(uint8_t *out, uint32_t bytes)
             wrote = (int)(g_frame_samples * 4);
             zero(g_pcm, (uint32_t)wrote);
             g_fade = FADE_SAMPLES;
+            if (!ST->bad_frames)                   /* black box: header of the first bad frame */
+                for (int i = 0; i < 4; i++) ldac_dbg.bad_hdr[i] = i < (int)f->len ? f->buf[i] : 0;
             ST->bad_frames++;
         } else if ((uint32_t)wrote != g_frame_samples * 4) {
             g_frame_samples = (uint32_t)wrote / 4; /* learn the real frame size */
@@ -465,6 +477,28 @@ static int ldac_store(uint8_t *header, uint8_t *buf, uint32_t bytes)
     }
     if (bytes < 4) return NO_ERROR;
     buf++; bytes--;                                 /* media payload header (frame count) */
+    /* Frame header: 0xAA, then the sampling-rate id in the top 3 bits (0 44.1k, 1 48k, ...). A
+     * mismatch with the configured rate means the phone reconfigured the stream behind our back
+     * (H2 gets an empty codec struct for vendor codecs): fix the device context and return
+     * SYNC_ERROR, which makes the player restart (FUN_0c127274 -> FUN_0c08a4d0(0xe)) and set
+     * everything up again at the right rate. */
+    if (buf[0] == 0xAA) {
+        uint32_t id = buf[1] >> 5;
+        uint32_t rate = id == 0 ? 44100 : id == 1 ? 48000 : 0;
+        ldac_dbg.frame_rate_id = (uint8_t)id;
+        if (rate && rate == ST->sample_rate) {
+            g_rate_fixes = 0;
+        } else if (rate) {
+            if (BLK->rate_fix_asked)
+                return NO_ERROR;             /* restart pending: drop, do not queue undecodable frames */
+            if (g_rate_fixes < RATE_FIX_MAX && ldac_set_ctx_rate(rate)) {
+                g_rate_fixes++;
+                ldac_dbg.rate_fixes++;
+                BLK->rate_fix_asked = 1;
+                return SYNC_ERROR;
+            }
+        }
+    }
     uint32_t n = 0;
     for (uint32_t i = 0; i + 3 <= bytes && buf[i] == 0xAA; i += frame_len(buf + i)) n++;
     uint32_t len_now = a2dp_audio_list_length(list());

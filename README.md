@@ -19,7 +19,9 @@ the same way.
 
 Status of the LDAC build:
 
-- Works with a Samsung Galaxy S25 Ultra (pick LDAC by hand, Samsung defaults to AAC) and Linux PipeWire.
+- Works with a Samsung Galaxy S25 Ultra (pick LDAC by hand, Samsung defaults to AAC) and Linux PipeWire,
+  at 44.1 and 48 kHz, including switching the rate from Android's developer options while playing (a
+  one-second gap while the earbuds restart the player at the new rate).
 - Decoding was verified on the earbuds with built-in statistics: no decoding errors, no underflows and no
   restarts over full songs, with the CPU at ~22 % load.
 - Known differences from the official codecs:
@@ -98,6 +100,11 @@ late DMA periods, buffer level, CPU speed. Read them while music plays:
 python3 tools/ldac_stats.py            # one line per second; Ctrl-C to stop
 ```
 
+`python3 tools/ldac_stats.py --debug` prints a "black box" that survives phone sessions (the earbuds
+accept one connection at a time, so the PC cannot watch while a phone plays). It holds the last codec
+configuration events with their raw bytes, the decoder's sample rate in the last two streams, and how
+the last stream went (frames, bad frames, underflows, header of the first bad frame).
+
 For listening tests of a new build, `tools/guarded_play.py SINK FILE` plays a file and stops it at
 the first anomaly in those statistics, or if the statistics stop arriving.
 
@@ -122,7 +129,12 @@ A few things the official firmware does not do for an unknown codec, so the add-
 
 - it requests the top CPU clock with its own `sysfreq` user (the firmware resets the A2DP one);
 - it sets the playback-speed tuner's buffer target (the firmware passes 0 and drains the buffer);
-- it runs the LDAC library from a relocated copy in RAM (`tools/mkpayload.py`).
+- it runs the LDAC library from a relocated copy in RAM (`tools/mkpayload.py`);
+- it handles the codec events that reach it with an empty codec description. The firmware's Bluetooth
+  stack does not copy vendor codec details on an AVDTP reconfigure (a phone changing the sample rate),
+  nor on the open that follows a configuration started by the earbuds. The add-on treats such an event
+  as LDAC at the last known rate. If the frame headers then show another rate, it fixes the rate and
+  restarts the player (at most 3 times in a row).
 
 The lab notes, in Spanish, are in `docs/FINDINGS.md` and `docs/LDAC_PORT.md`.
 

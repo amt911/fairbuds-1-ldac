@@ -20,6 +20,27 @@ SIZE = 120
 assert struct.calcsize(FMT) == SIZE and len(FIELDS) == len(struct.unpack(FMT, bytes(SIZE)))
 
 
+DBG_SIZE = 76
+
+
+def parse_debug(reply):
+    """A7 reply (black box, ldac_dbg_t in ldac/src/addon.h) -> dict."""
+    if len(reply) < 2 + DBG_SIZE or reply[0] != 0xA7 or reply[1] != DBG_SIZE:
+        raise ValueError(f"bad debug reply {reply[:8].hex()}")
+    b = reply[2:2 + DBG_SIZE]
+    ver, n_ev = b[0], b[1]
+    bad_hdr = b[2:6]
+    evs = []
+    for i in range(4):
+        e = b[8 + 12 * i: 20 + 12 * i]
+        evs.append({"hook": e[0], "type": e[1], "len": e[2], "applied": e[3], "elements": e[4:12].hex()})
+    init_fs = struct.unpack_from("<2I", b, 56)
+    prev = struct.unpack_from("<3I", b, 64)
+    order = [evs[(n_ev - 1 - k) & 3] for k in range(min(n_ev, 4))]      # newest first
+    return {"ver": ver, "n_ev": n_ev, "events_newest_first": order, "bad_hdr": bad_hdr.hex(),
+            "init_fs_last_prev": init_fs, "prev_frames": prev[0], "prev_bad": prev[1], "prev_underflows": prev[2]}
+
+
 def parse(reply):
     """reply bytes (starting with A6) -> dict, or {'open': False, ...} when no stream."""
     if len(reply) < 4 or reply[0] != 0xA6:
@@ -34,8 +55,8 @@ def parse(reply):
     return d
 
 
-def request(sock):
-    sock.send(b"\xa5BEST")
+def request(sock, magic=b"BEST"):
+    sock.send(b"\xa5" + magic)
     buf = b""
     t_end = time.time() + 3
     while time.time() < t_end:
@@ -44,6 +65,8 @@ def request(sock):
         except socket.timeout:
             break
         if len(buf) >= 2 and buf[0] == 0xA6 and len(buf) >= (2 + buf[1] if buf[1] else 4):
+            return buf
+        if len(buf) >= 2 and buf[0] == 0xA7 and len(buf) >= 2 + buf[1]:
             return buf
     raise TimeoutError(f"no complete reply (got {buf.hex()})")
 
@@ -78,11 +101,17 @@ def main():
     ap.add_argument("--interval", type=float, default=1.0)
     ap.add_argument("--count", type=int, default=0, help="0 = until Ctrl-C")
     ap.add_argument("--log")
+    ap.add_argument("--debug", action="store_true", help="print the black box (config events, last streams) and exit")
     a = ap.parse_args()
     s = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
     s.settimeout(10)
     s.connect((fairbuds_addr(a.addr), 13))
     s.settimeout(0.5)
+    if a.debug:
+        import json
+        print(json.dumps(parse_debug(request(s, b"BESD")), indent=1))
+        s.close()
+        return
     log = open(a.log, "a") if a.log else None
     prev, i = None, 0
     try:

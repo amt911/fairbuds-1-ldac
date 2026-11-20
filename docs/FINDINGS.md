@@ -580,3 +580,24 @@ RAM, o más frecuencia.
 - v7g flasheada con el procedimiento publicado (`build_all.sh` + `pc_ota3.py` con config de
   direcciones a cero y dirección autodetectada): COMMIT OK, nombre y dirección del casco intactos,
   `dest_mut` 120, lista ~112, 0 errores.
+
+## 44,1 kHz desde el móvil y estructuras de códec vacías (2026-11-20 tarde, v7h..v7j)
+
+- Síntoma: en el S25, al cambiar LDAC de 48 a 44,1 kHz en opciones de desarrollador, silencio; al
+  volver a 48 kHz suena. Desde el PC (cierre + apertura del stream) 44,1 kHz funciona.
+- Caja negra (v7h, `tools/ldac_stats.py --debug`, petición `A5 'BESD'` → `A7`): el cambio llega por
+  **H2 (reconfigure) con la estructura del códec vacía** (`type 0xFF, len 0`, sin bytes): el stack de
+  BES no copia la información de códecs de fabricante. El contexto se quedaba a 48 kHz, el decoder se
+  iniciaba a 48 000 y los frames (cabecera `aa 15…`: id de frecuencia 0 = 44,1 kHz) se rechazaban
+  todos (3534/3534 malos).
+- Lo mismo pasa en la apertura (H5) que sigue a una configuración iniciada por el casco (H4): era el
+  "la primera configuración LDAC tras reconectar no llega" que obligaba a alternar el perfil.
+- v7i: `ldac_store` lee el id de frecuencia de la cabecera de cada paquete; si no coincide con la del
+  decoder, corrige `ctx+0x3f` (`ldac_set_ctx_rate`) y devuelve SYNC_ERROR (-6) → el framework reinicia
+  el reproductor (`FUN_0c08a4d0(0xe)`) a la frecuencia buena; descarta los paquetes mientras tanto;
+  como mucho 3 reinicios seguidos.
+- v7j: un evento de fabricante con estructura vacía se trata como LDAC con la última frecuencia
+  conocida (la elegida en H4, la última aplicada o la corregida).
+- Resultado en el S25 (caja negra): dos H2 vacías aplicadas (`applied 2`), decoder a 44 100 y luego a
+  48 000 Hz, último stream 2724 frames / 0 malos / 0 underflows. El usuario: "ahora sí funciona".
+- Sabotajes: 19 del decoder (incluidas variantes de `hooks.c` comprobadas con emu_hooks) y 9 de ganchos.

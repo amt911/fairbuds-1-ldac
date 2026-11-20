@@ -19,6 +19,7 @@ ldac_cfg_hook:
     push    {r0-r3, r12, lr}
     mov     r0, r3
     mov     r1, r4
+    movs    r2, #2                  /* hook id for the black box */
     bl      ldac_cfg_apply
     pop     {r0-r3, r12, lr}
 1:  cmp     r8, #0
@@ -62,6 +63,7 @@ ldac_open_hook:
     push    {r0-r3, r12, lr}
     ldr     r0, [r5, #0xc]
     mov     r1, r4
+    movs    r2, #5                  /* hook id for the black box */
     bl      ldac_cfg_apply
     pop     {r0-r3, r12, lr}
     ldrb    r3, [r5]

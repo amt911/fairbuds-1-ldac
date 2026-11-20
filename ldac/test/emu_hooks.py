@@ -7,6 +7,7 @@ to stock code, then checks: where execution resumes, registers preserved, flags,
 
 Usage: .venv/bin/python ldac/test/emu_hooks.py IMAGE.bin BLOB.elf
 """
+import os
 import struct
 import subprocess
 import sys
@@ -115,6 +116,22 @@ class Emu:
 
 SENT = [0x11110000 + i for i in range(13)]
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../tools"))
+from ldac_stats import parse_debug  # noqa: E402
+
+
+def dbg(e, S):
+    return parse_debug(bytes([0xA7, 76]) + e.rd(S["ldac_dbg"], 76))
+
+
+def check_event(e, S, n0, name, hook, elems, applied):
+    d = dbg(e, S)
+    ev = d["events_newest_first"][0] if d["n_ev"] else None
+    want_e = (elems + bytes(8))[:8].hex()
+    check(d["n_ev"] == (n0 + 1) & 0xFF and ev and ev["hook"] == hook and ev["elements"] == want_e and
+          ev["applied"] == applied, f"{name}: black box event {ev} (n_ev {n0}->{d['n_ev']}, want hook {hook}, "
+          f"elements {want_e}, applied {applied})")
+
 
 def test_h1(e, S):
     print("H1 boot hook")
@@ -174,6 +191,7 @@ def test_h2(e, S):
     cases = [
         ("LDAC 48k", 0xFF, bytes.fromhex("2d010000aa001001"), 0x0C0C0318, (0xFF, 0x10, 0x10, 2)),
         ("LDAC 44.1k", 0xFF, bytes.fromhex("2d010000aa002001"), 0x0C0C0318, (0xFF, 0x20, 0x10, 2)),
+        ("LDAC reconfigure, empty codec struct (hint 44.1k)", 0xFF, b"", 0x0C0C0318, (0xFF, 0x20, 0x10, 2)),
         ("LDAC 96k (not advertised)", 0xFF, bytes.fromhex("2d010000aa000401"), 0x0C0C0318, None),
         ("aptX vendor", 0xFF, bytes.fromhex("4f0000000100ff"), 0x0C0C0318, None),
         ("SBC", 0x00, bytes.fromhex("3fff0235"), 0x0C0C0280, None),
@@ -187,7 +205,14 @@ def test_h2(e, S):
         codec_struct(e, cs, ctype, elems, el)
         regs = list(SENT)
         regs[3], regs[4], regs[8] = cs, ctx, ctype
+        if ctype == 0xFF and not elems:
+            e.wr(S["ldac_fs_hint"], b"\x20")
+        n0 = dbg(e, S)["n_ev"]
         pc, err = e.run(SITES["H2"], [0x0C0C0318, 0x0C0C0280], regs)
+        if ctype in (0x00, 0xFF):        # the hook only looks at SBC and vendor codecs
+            check_event(e, S, n0, f"H2 {name}", 2, elems, (2 if not elems else 1) if want else 0)
+        else:
+            check(dbg(e, S)["n_ev"] == n0, f"H2 {name}: no black box event")
         check(err is None and pc == want_pc, f"H2 {name}: resumes at {want_pc:#x} (got {pc}, {err})")
         r = e.regs()
         check(r == regs, f"H2 {name}: r0-r12 preserved")
@@ -207,7 +232,7 @@ def test_h2(e, S):
         check(not bad, f"H2 {name}: unexpected writes {bad[:5]}")
 
 
-def test_h4(e):
+def test_h4(e, S):
     print("H4 config-init hook")
     rem, rel, cfg, buf = 0x20102000, 0x20102100, 0x20102200, 0x20102300
     cases = [
@@ -226,21 +251,28 @@ def test_h4(e):
         e.wr(cfg, bytes([ctype, 8]) + struct.pack("<I", buf) + b"\0" * 6)
         regs = list(SENT)
         regs[2], regs[3], regs[8] = rem, ctype, cfg
+        n0 = dbg(e, S)["n_ev"]
         pc, err = e.run(SITES["H4"], [0x0C0C0318, 0x0C0C00B2], regs)
+        if ctype == 0xFF:                 # vendor codecs reach ldac_cfginit_apply
+            check_event(e, S, n0, f"H4 {name}", 4, bytes.fromhex(elems) if isinstance(elems, str) else elems,
+                        bytes.fromhex(want_buf)[6] if want_buf else 0)
+            if want_buf:
+                check(e.rd(S["ldac_fs_hint"], 1)[0] == bytes.fromhex(want_buf)[6],
+                      f"H4 {name}: rate hint {e.rd(S['ldac_fs_hint'], 1).hex()} follows the chosen rate")
         check(err is None and pc == want_pc, f"H4 {name}: resumes at {want_pc:#x} (got {pc}, {err})")
         check(e.regs() == regs, f"H4 {name}: r0-r12 preserved")
         got = e.rd(buf, 10)
         if want_buf:
             check(got == bytes.fromhex(want_buf) + b"\0\0", f"H4 {name}: config {got.hex()}")
-            allowed = [(buf, buf + 8)]
+            allowed = [(buf, buf + 8), GAP]
         else:
             check(got == b"\0" * 10, f"H4 {name}: config untouched")
-            allowed = []
+            allowed = [GAP]           # black box
         bad = e.writes_outside(allowed)
         check(not bad, f"H4 {name}: unexpected writes {bad[:5]}")
 
 
-def test_h5(e):
+def test_h5(e, S):
     print("H5 stream open hook")
     ctx = e.ctx_base
     ev, cs, el = 0x20103000, 0x20103100, 0x20103200
@@ -248,6 +280,7 @@ def test_h5(e):
     cases = [
         ("LDAC 48k open (ev 2)", 2, 0xFF, "2d010000aa001001", 0x0C0C05FC, (0xFF, 0x10, 0x10, 2)),
         ("LDAC 44.1k open (ev 1f)", 0x1F, 0xFF, "2d010000aa002001", 0x0C0BFCB0, (0xFF, 0x20, 0x10, 2)),
+        ("LDAC open, empty codec struct (hint 48k)", 2, 0xFF, "", 0x0C0C05FC, (0xFF, 0x10, 0x10, 2)),
         ("SBC open (ev 2)", 2, 0x00, "3fff0235", 0x0C0C05FC, None),
         ("aptX open (ev 2)", 2, 0xFF, "4f0000000100ff", 0x0C0C05FC, None),
     ]
@@ -257,7 +290,11 @@ def test_h5(e):
         e.wr(ev, bytes([event]) + b"\0" * 11 + struct.pack("<I", cs))
         regs = list(SENT)
         regs[4], regs[5] = ctx, ev
+        if ctype == 0xFF and not elems:
+            e.wr(S["ldac_fs_hint"], b"\x10")
+        n0 = dbg(e, S)["n_ev"]
         pc, err = e.run(SITES["H5"], [0x0C0C05FC, 0x0C0BFCB0], regs)
+        check_event(e, S, n0, f"H5 {name}", 5, bytes.fromhex(elems), (2 if not elems else 1) if want else 0)
         check(err is None and pc == want_pc, f"H5 {name}: resumes at {want_pc:#x} (got {pc}, {err})")
         r = e.regs()
         check(r[3] == event, f"H5 {name}: r3 = event byte ({r[3]:#x})")
@@ -312,6 +349,9 @@ def test_h6(e, S):
     pc, err, _ = run(0xA5)
     want = bytes([0xA6, 120]) + stats[:2] + bytes([2, 1]) + stats[4:]
     check(pc == DEFAULT and sent == [want], f"H6 stream: reply {[x[:8].hex() for x in sent]}")
+    pc, err, _ = run(0xA5, magic=b"BESD")
+    want = bytes([0xA7, 76]) + e.rd(S["ldac_dbg"], 76)
+    check(pc == DEFAULT and sent == [want], f"H6 black box: reply {[x[:8].hex() for x in sent]}")
     for label, kw in (("wrong magic", {"magic": b"BESX"}), ("role 3", {"role": 3}), ("TLV mode", {"tlv": 1})):
         pc, err, _ = run(0xA5, **kw)
         check(pc == DEFAULT and not sent, f"H6 {label}: no reply, stock exit ({pc}, {len(sent)})")
@@ -352,8 +392,8 @@ def main():
     e = Emu(img)
     test_h1(e, S)
     test_h2(e, S)
-    test_h4(e)
-    test_h5(e)
+    test_h4(e, S)
+    test_h5(e, S)
     test_h6(e, S)
     test_h3(e, S)
     print(f"{'ALL PASS' if not failures else f'{len(failures)} FAILURES'}")
