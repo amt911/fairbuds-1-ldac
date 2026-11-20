@@ -1,0 +1,26 @@
+# Inputs you obtain yourself and build outputs. Never commit Fairphone or Sony files.
+*.apk
+*.bin
+*.img
+*.elf
+*.o
+*.a
+*.jar
+*.log
+__pycache__/
+.venv/
+work/apk/
+work/apk_decoded/
+work/jadx/
+work/arm64/
+work/ghidra/
+work/fw/
+work/logs/
+work/patched/
+work/ldac/build/
+work/ldac/lib/
+work/ldac/inc/
+# research leftovers (device-specific addresses, screenshots, session notes)
+work/*.py
+work/*.png
+work/HANDOFF_PROMPT.md
